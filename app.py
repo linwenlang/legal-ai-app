@@ -2,142 +2,126 @@ import streamlit as st
 from openai import OpenAI
 import json, os
 
-# 1. 基础页面配置
+# 1. 页面基本配置
 st.set_page_config(page_title="律盾 AI", page_icon="⚖️", layout="wide")
 
-# 2. 用户数据库管理 (保存在本地 users.json)
+# 2. 简易数据库：管理用户账号和剩余额度
 USER_DB = "users.json"
 
-def load_users():
+def load_data():
     if os.path.exists(USER_DB):
         try:
             with open(USER_DB, "r") as f:
                 return json.load(f)
         except:
             pass
-    # 默认账号配置 (手机号: admin, 密码: 888)
+    # 默认账号：账号 admin 密码 888 (额度 999 次)
     return {"admin": {"password": "888", "count": 999}}
 
-def save_users(users):
+def save_data(data):
     with open(USER_DB, "w") as f:
-        json.dump(users, f)
+        json.dump(data, f)
 
-# 初始化 session 状态
-if 'u' not in st.session_state:
-    st.session_state.u = load_users()
+# 初始化数据到 Session
+if 'db' not in st.session_state:
+    st.session_state.db = load_data()
 
-# 3. 初始化 AI 客户端
-# 提醒：必须在 Streamlit Secrets 里填好 api_key
+# 3. 初始化 OpenAI 客户端 (使用 DeepSeek 引擎)
 client = OpenAI(
     api_key=st.secrets["api_key"], 
     base_url="https://api.deepseek.com"
 )
 
-# 4. 侧边栏：登录控制与客服
+# 4. 侧边栏：会员中心与登录系统
 with st.sidebar:
     st.title("🛡️ 律盾会员中心")
-    if "in" not in st.session_state:
-        st.session_state["in"] = False
     
-    if not st.session_state["in"]:
-        st.subheader("请先登录")
-        uid = st.text_input("账号/手机号")
-        pwd = st.text_input("登录密码", type="password")
+    if "is_login" not in st.session_state:
+        st.session_state.is_login = False
+    
+    if not st.session_state.is_login:
+        st.subheader("请登录以使用专业功能")
+        user_input = st.text_input("手机号/账号")
+        pass_input = st.text_input("登录密码", type="password")
         if st.button("立即登录"):
-            if uid in st.session_state.u and st.session_state.u[uid]["password"] == pwd:
-                st.session_state["in"] = True
-                st.session_state.cur = uid
+            if user_input in st.session_state.db and st.session_state.db[user_input]["password"] == pass_input:
+                st.session_state.is_login = True
+                st.session_state.current_user = user_input
                 st.rerun()
             else:
-                st.error("❌ 账号或密码错误")
-        st.stop()  # 未登录则停止运行后续代码
+                st.error("❌ 账号或密码不正确")
+        st.stop()  # 未登录状态下不显示主界面
     else:
-        st.success(f"✅ 欢迎回来，{st.session_state.cur}")
-        st.write(f"📊 剩余额度：**{st.session_state.u[st.session_state.cur]['count']}** 次")
+        st.success(f"已登录：{st.session_state.current_user}")
+        count = st.session_state.db[st.session_state.current_user]["count"]
+        st.metric("剩余可用额度", f"{count} 次")
         st.divider()
-        st.info(f"💡 额度不足？请联系客服：\n\n微信：**linwlang12**")
-        if st.button("退出登录"):
-            st.session_state["in"] = False
+        st.info(f"客服微信：**linwlang12**\n\n(额度不足请联系充值)")
+        if st.button("安全退出"):
+            st.session_state.is_login = False
             st.rerun()
 
-# 5. 主功能界面 (只有登录后才会显示)
-st.title("⚖️ 律盾 AI 专业法律助手")
-st.caption("由 DeepSeek 强力驱动 | 您的专属智能法律顾问")
+# 5. 主功能界面
+st.title("⚖️ 律盾 AI 律师")
+st.markdown("---")
 
-# 定义功能标签页
-tabs = st.tabs(["🔍 风险排雷", "✍️ 智能起草", "🌐 专业翻译"])
+# 创建功能标签页
+t1, t2, t3 = st.tabs(["🔍 风险排雷", "✍️ 智能起草", "🌐 专业翻译"])
 
-# --- 功能 1：风险排雷 ---
-with tabs[0]:
-    st.subheader("合同/法律文本分析")
-    txt = st.text_area("请粘贴需要审阅的内容：", height=200, key="audit_input")
-    if st.button("🚀 开始风险分析"):
-        if st.session_state.u[st.session_state.cur]['count'] > 0:
-            if txt:
-                with st.spinner("AI 律师正在深度审阅中..."):
+# --- 风险排雷 ---
+with t1:
+    content = st.text_area("请粘贴需要分析的合同或法律条文：", height=200, key="audit")
+    if st.button("开始 AI 分析"):
+        if st.session_state.db[st.session_state.current_user]["count"] > 0:
+            if content:
+                with st.spinner("AI 律师正在审阅..."):
                     try:
-                        r = client.chat.completions.create(
+                        resp = client.chat.completions.create(
                             model="deepseek-chat",
-                            messages=[{"role":"user","content":"请作为资深律师分析以下法律文本的潜在风险、陷阱并给出中文建议："+txt}]
+                            messages=[{"role":"user","content":"请作为法律专家分析以下文本的法律风险并给出专业建议："+content}]
                         )
-                        st.markdown("### 📜 分析报告")
-                        st.write(r.choices[0].message.content)
-                        # 扣费并保存
-                        st.session_state.u[st.session_state.cur]['count'] -= 1
-                        save_users(st.session_state.u)
+                        st.markdown("### 📝 分析建议")
+                        st.write(resp.choices[0].message.content)
+                        # 扣除额度
+                        st.session_state.db[st.session_state.current_user]["count"] -= 1
+                        save_data(st.session_state.db)
                     except Exception as e:
-                        st.error(f"分析失败: {e}")
+                        st.error(f"连接失败：{e}")
             else:
-                st.warning("⚠️ 请先输入文本内容")
+                st.warning("请输入文本内容")
         else:
-            st.error("❌ 余额不足，请联系客服充值")
+            st.error("额度不足，请联系客服充值")
 
-# --- 功能 2：智能起草 ---
-with tabs[1]:
-    st.subheader("法律文书一键生成")
-    req = st.text_area("请描述起草要求（例如：合伙协议，需包含利润平分）：", key="draft_input")
-    if st.button("✨ 立即起草文书"):
-        if st.session_state.u[st.session_state.cur]['count'] > 0:
-            if req:
+# --- 智能起草 ---
+with t2:
+    draft_req = st.text_area("输入您的文书起草要求（如：一份租赁合同）：", key="draft")
+    if st.button("立即起草"):
+        if st.session_state.db[st.session_state.current_user]["count"] > 0:
+            if draft_req:
                 with st.spinner("正在生成专业文书..."):
-                    try:
-                        r = client.chat.completions.create(
-                            model="deepseek-chat",
-                            messages=[{"role":"user","content":"请起草一份专业的中文法律文书，内容需严谨且符合法律规范："+req}]
-                        )
-                        st.success("✅ 生成成功！")
-                        st.info(r.choices[0].message.content)
-                        # 扣费
-                        st.session_state.u[st.session_state.cur]['count'] -= 1
-                        save_users(st.session_state.u)
-                    except Exception as e:
-                        st.error(f"生成失败: {e}")
+                    resp = client.chat.completions.create(
+                        model="deepseek-chat",
+                        messages=[{"role":"user","content":"请起草一份专业的法律文书："+draft_req}]
+                    )
+                    st.info(resp.choices[0].message.content)
+                    st.session_state.db[st.session_state.current_user]["count"] -= 1
+                    save_data(st.session_state.db)
             else:
-                st.warning("⚠️ 请先输入起草要求")
+                st.warning("请输入起草要求")
         else:
-            st.error("❌ 余额不足，请联系客服")
+            st.error("额度不足")
 
-# --- 功能 3：专业翻译 ---
-with tabs[2]:
-    st.subheader("法律英语/中文互译")
-    trs = st.text_area("粘贴法律文本进行专业翻译：", key="trans_input")
-    if st.button("🌐 开始翻译"):
-        if st.session_state.u[st.session_state.cur]['count'] > 0:
-            if trs:
-                with st.spinner("正在进行专业翻译..."):
-                    try:
-                        r = client.chat.completions.create(
-                            model="deepseek-chat",
-                            messages=[{"role":"user","content":"请将以下内容进行法律专业的精准互译（中英）："+trs}]
-                        )
-                        st.markdown("### 🌍 翻译结果")
-                        st.success(r.choices[0].message.content)
-                        # 扣费
-                        st.session_state.u[st.session_state.cur]['count'] -= 1
-                        save_users(st.session_state.u)
-                    except Exception as e:
-                        st.error(f"翻译失败: {e}")
-            else:
-                st.warning("⚠️ 请先输入文本")
-        else:
-            st.error("❌ 余额不足，请联系客服")
+# --- 专业翻译 ---
+with t3:
+    trans_text = st.text_area("粘贴法律文本进行中英互译：", key="trans")
+    if st.button("执行翻译"):
+        if st.session_state.db[st.session_state.current_user]["count"] > 0:
+            if trans_text:
+                with st.spinner("翻译中..."):
+                    resp = client.chat.completions.create(
+                        model="deepseek-chat",
+                        messages=[{"role":"user","content":"法律专业翻译（中英）："+trans_text}]
+                    )
+                    st.success(resp.choices[0].message.content)
+                    st.session_state.db[st.session_state.current_user]["count"] -= 1
+                    save_data(st.session_state.db)
