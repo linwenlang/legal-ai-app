@@ -9,17 +9,39 @@ from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 # 1. 页面配置
-st.set_page_config(page_title="律盾 AI - 专业法务助手", page_icon="⚖️", layout="wide")
+st.set_page_config(page_title="律盾 AI", page_icon="⚖️", layout="wide")
 
-# 自定义 CSS
+# --- APK 专属沉浸式美化插件 (关键：隐藏网页痕迹) ---
 st.markdown("""
     <style>
+    /* 隐藏顶部彩虹条、菜单按钮和底部水印 */
+    header {visibility: hidden;}
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    .stDeployButton {display:none;}
+    
+    /* 极致沉浸感：消除顶部空白 */
+    .stApp { margin-top: -80px; }
+    
+    /* 统一商务色调与标签页美化 */
     .main { background-color: #f8f9fa; }
-    .stTabs [data-baseweb="tab-list"] { gap: 24px; }
-    .stTabs [data-baseweb="tab"] { height: 50px; background-color: #ffffff; border-radius: 5px; }
-    .stTabs [aria-selected="true"] { background-color: #1E3A8A !important; color: white !important; }
+    .stTabs [data-baseweb="tab-list"] { gap: 15px; }
+    .stTabs [data-baseweb="tab"] { 
+        height: 45px; 
+        background-color: #ffffff; 
+        border-radius: 8px 8px 0 0;
+        border: 1px solid #f0f0f0;
+    }
+    .stTabs [aria-selected="true"] { 
+        background-color: #1E3A8A !important; 
+        color: white !important; 
+        font-weight: bold;
+    }
+    
+    /* 隐藏滚动条让界面更清爽 */
+    ::-webkit-scrollbar { width: 0px; background: transparent; }
     </style>
-    """, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 # --- 数据库持久化 ---
 USER_DB_FILE = "users_data.json"
@@ -41,11 +63,11 @@ if 'users' not in st.session_state:
 # 2. API 配置
 try:
     client = OpenAI(api_key=st.secrets["api_key"], base_url="https://api.deepseek.com")
-except Exception as e:
-    st.error("❌ API 配置失效，请检查后台 Secrets。")
+except:
+    st.error("❌ API 配置异常")
     st.stop()
 
-# --- 工具函数：生成 Word 报告 ---
+# --- 工具函数：生成 Word ---
 def generate_pro_docx(title, content):
     doc = docx.Document()
     header = doc.add_heading(title, 0)
@@ -59,9 +81,9 @@ def generate_pro_docx(title, content):
     doc.save(bio)
     return bio.getvalue()
 
-# 3. 侧边栏：登录与上帝视角后台
+# 3. 侧边栏
 with st.sidebar:
-    st.title("🛡️ 会员管理中心")
+    st.title("🛡️ 律盾会员中心")
     if "logged_in" not in st.session_state: st.session_state.logged_in = False
 
     if not st.session_state.logged_in:
@@ -92,30 +114,25 @@ with st.sidebar:
         curr_u = st.session_state.users[st.session_state.user]
         st.metric("剩余可用点数", f"{curr_u['count']} 次")
         
-        # 👑 管理员上帝视角后台 (支持加减点数)
+        # 👑 管理员上帝视角后台
         if st.session_state.role == "admin":
             st.divider()
-            with st.expander("👑 超级管理员后台 (加减/修改)"):
-                st.write("📊 用户数据全览")
+            with st.expander("👑 超级管理员后台"):
                 df = pd.DataFrame.from_dict(st.session_state.users, orient='index')
                 if not df.empty:
                     st.dataframe(df[['password', 'count']], use_container_width=True)
                 
                 st.divider()
                 target = st.selectbox("选择账号", list(st.session_state.users.keys()))
-                op_mode = st.radio("操作模式", ["增加额度", "扣除额度", "直接重置为"], horizontal=True)
-                num = st.number_input("点数", 1, 1000, 10)
+                op_mode = st.radio("操作", ["增加额度", "扣除额度", "直接重置"], horizontal=True)
+                num = st.number_input("数量", 1, 1000, 10)
                 
-                if st.button("确认修改用户信息"):
-                    if op_mode == "增加额度":
-                        st.session_state.users[target]["count"] += num
-                    elif op_mode == "扣除额度":
-                        st.session_state.users[target]["count"] -= num
-                    else:
-                        st.session_state.users[target]["count"] = num
-                    
+                if st.button("确认修改"):
+                    if op_mode == "增加额度": st.session_state.users[target]["count"] += num
+                    elif op_mode == "扣除额度": st.session_state.users[target]["count"] -= num
+                    else: st.session_state.users[target]["count"] = num
                     save_users(st.session_state.users)
-                    st.success(f"✅ 已完成对 {target} 的{op_mode}操作")
+                    st.success("✅ 操作成功")
                     st.rerun()
 
         st.divider()
@@ -124,67 +141,52 @@ with st.sidebar:
             st.session_state.logged_in = False
             st.rerun()
 
-# 4. 主界面核心功能
-st.title("⚖️ 律盾 AI - 专业私人律师旗舰版")
+# 4. 主界面
+st.title("⚖️ 律盾 AI 律师")
 
 def check_and_use():
     if st.session_state.users[st.session_state.user]["count"] <= 0:
-        st.error("⚠️ 余额不足！请添加客服微信 **linwlang12** 充值获取更多额度。")
+        st.error("⚠️ 余额不足！请联系微信 **linwlang12** 充值。")
         return False
     return True
 
-tabs = st.tabs(["🔍 合同风险排雷", "✍️ 专业文书起草", "🌐 法律文本翻译"])
+tabs = st.tabs(["🔍 风险分析", "✍️ 文书起草", "🌐 翻译专家"])
 
-# --- 模块 1：高级风险分析 ---
 with tabs[0]:
-    st.subheader("🎯 风险评估与条款审查")
-    txt = st.text_area("请粘贴合同内容：", height=250, key="audit_in")
-    opt = st.radio("扫描深度", ["标准扫描", "深度挖掘（含法律依据）", "霸王条款专项"], horizontal=True)
-    is_en = st.checkbox("生成双语对照报告")
-
-    if st.button("🚀 执行专家级审计", use_container_width=True):
+    txt = st.text_area("粘贴合同：", height=200, key="audit_in")
+    opt = st.radio("深度", ["标准", "深度", "霸王条款"], horizontal=True)
+    is_en = st.checkbox("中英双语报告")
+    if st.button("🚀 执行审计", use_container_width=True):
         if txt and check_and_use():
-            with st.spinner("⚖️ 律师团队审查中..."):
-                prompt = f"你是一位资深中国律师。请执行【{opt}】分析。必须包含风险评级、核心风险点、法律依据和修改建议。"
-                if is_en: prompt += " 请先提供中文分析，再用 '---SPLIT---' 分隔，最后提供英文摘要。"
-                try:
-                    res = client.chat.completions.create(model="deepseek-chat", messages=[{"role":"system","content":prompt},{"role":"user","content":txt}])
-                    ans = res.choices[0].message.content
-                    if "---SPLIT---" in ans:
-                        cn, en = ans.split("---SPLIT---")
-                        st.error("🇨🇳 中文深度报告"); st.write(cn)
-                        st.warning("🇺🇸 English Report"); st.write(en)
-                    else:
-                        st.info(ans)
-                    st.download_button("📥 下载 Word 报告", data=generate_pro_docx("法律风险审计报告", ans.replace("---SPLIT---","\n")), file_name="风险分析报告.docx")
-                    st.session_state.users[st.session_state.user]["count"] -= 1
-                    save_users(st.session_state.users)
-                except Exception as e: st.error(f"分析失败: {e}")
-
-# --- 模块 2：专业起草 ---
-with tabs[1]:
-    st.subheader("✍️ 法律文书标准起草")
-    req = st.text_area("起草需求：", placeholder="描述：类型、金额、责任等...", height=200)
-    if st.button("✨ 生成法律文书", use_container_width=True):
-        if req and check_and_use():
-            with st.spinner("正在起草..."):
-                res = client.chat.completions.create(model="deepseek-chat", messages=[{"role":"system","content":"严谨中国律师。"},{"role":"user","content":req}])
+            with st.spinner("审查中..."):
+                prompt = f"资深律师分析【{opt}】。中英对照开关：{is_en}。需含法律依据。"
+                res = client.chat.completions.create(model="deepseek-chat", messages=[{"role":"system","content":prompt},{"role":"user","content":txt}])
                 ans = res.choices[0].message.content
-                st.code(ans, language="markdown")
-                st.download_button("📥 下载 Word 文稿", data=generate_pro_docx("文书起草", ans), file_name="起草文书.docx")
+                st.info(ans)
+                st.download_button("📥 下载 Word", data=generate_pro_docx("审计报告", ans), file_name="分析报告.docx")
                 st.session_state.users[st.session_state.user]["count"] -= 1
                 save_users(st.session_state.users)
 
-# --- 模块 3：法律翻译 ---
+with tabs[1]:
+    req = st.text_area("起草需求：", height=200)
+    if st.button("✨ 立即生成", use_container_width=True):
+        if req and check_and_use():
+            with st.spinner("起草中..."):
+                res = client.chat.completions.create(model="deepseek-chat", messages=[{"role":"system","content":"专业律师。"},{"role":"user","content":req}])
+                ans = res.choices[0].message.content
+                st.write(ans)
+                st.download_button("📥 下载文件", data=generate_pro_docx("文书草案", ans), file_name="起草结果.docx")
+                st.session_state.users[st.session_state.user]["count"] -= 1
+                save_users(st.session_state.users)
+
 with tabs[2]:
-    st.subheader("🌐 国际法律术语翻译")
-    tin = st.text_area("待翻译文本：", height=200)
-    if st.button("🛰️ 执行专业翻译", use_container_width=True):
+    tin = st.text_area("翻译内容：", height=200)
+    if st.button("🛰️ 专业翻译", use_container_width=True):
         if tin and check_and_use():
             with st.spinner("翻译中..."):
-                res = client.chat.completions.create(model="deepseek-chat", messages=[{"role":"system","content":"法律翻译专家。"},{"role":"user","content":tin}])
+                res = client.chat.completions.create(model="deepseek-chat", messages=[{"role":"system","content":"法律翻译。"},{"role":"user","content":tin}])
                 ans = res.choices[0].message.content
                 st.success(ans)
-                st.download_button("📥 下载翻译件", data=generate_pro_docx("法律翻译报告", ans), file_name="翻译结果.docx")
+                st.download_button("📥 下载译文", data=generate_pro_docx("翻译报告", ans), file_name="翻译结果.docx")
                 st.session_state.users[st.session_state.user]["count"] -= 1
                 save_users(st.session_state.users)
